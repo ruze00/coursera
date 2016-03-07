@@ -10,6 +10,13 @@ import netrc
 import os
 import platform
 
+try:
+    import keyring
+except ImportError:
+    keyring = None
+
+KEYRING_SERVICE_NAME = 'coursera-dl'
+
 
 class CredentialsError(BaseException):
     """
@@ -27,9 +34,9 @@ def _getenv_or_empty(s):
     return os.getenv(s) or ""
 
 
-def get_config_paths(config_name):
+def get_config_paths(config_name):  # pragma: no test
     """
-    Returns a list of config files paths to try in order, given config file
+    Return a list of config files paths to try in order, given config file
     name and possibly a user-specified path.
 
     For Windows platforms, there are several paths that can be tried to
@@ -105,7 +112,8 @@ def get_config_paths(config_name):
 
 def authenticate_through_netrc(path=None):
     """
-    Returns the tuple user / password given a path for the .netrc file.
+    Return the tuple user / password given a path for the .netrc file.
+
     Raises CredentialsError if no valid netrc file is found.
     """
     errors = []
@@ -123,15 +131,16 @@ def authenticate_through_netrc(path=None):
                               netrc_machine)
             else:
                 return auths[0], auths[2]
-                
+
     error_messages = '\n'.join(str(e) for e in errors)
     raise CredentialsError(
         'Did not find valid netrc file:\n' + error_messages)
 
 
-def get_credentials(username=None, password=None, netrc=None):
+def get_credentials(username=None, password=None, netrc=None, use_keyring=False):
     """
-    Returns valid username, password tuple.
+    Return valid username, password tuple.
+
     Raises CredentialsError if username or password is missing.
     """
     if netrc:
@@ -143,8 +152,12 @@ def get_credentials(username=None, password=None, netrc=None):
             'Please provide a username with the -u option, '
             'or a .netrc file with the -n option.')
 
+    if not password and use_keyring:
+        password = keyring.get_password(KEYRING_SERVICE_NAME, username)
+
     if not password:
-        password = getpass.getpass(
-            'Coursera password for {0}: '.format(username))
+        password = getpass.getpass('Coursera password for {0}: '.format(username))
+        if use_keyring:
+            keyring.set_password(KEYRING_SERVICE_NAME, username, password)
 
     return username, password
